@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Шахматы онлайн | БЭМ + SOLID + ООП</title>
+    <style>
+        /* БЭМ-блоки */
+        .page {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #940031 0%, #764ba2 100%);
+        }
+
+        .game {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .game__header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .game__title {
+            color: #333;
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .game__status {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .game__board {
+            border: 3px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .board {
+            display: inline-block;
+            background: #deb887;
+        }
+
+        .board__row {
+            display: flex;
+        }
+
+        .board__square {
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .board__square_theme_light {
+            background-color: #f0d9b5;
+        }
+
+        .board__square_theme_dark {
+            background-color: #b58863;
+        }
+
+        .board__square_selected {
+            background-color: #7bc5d8 !important;
+            box-shadow: inset 0 0 0 2px #333;
+        }
+
+        .board__square_available {
+            background-color: #aaffaa !important;
+            opacity: 0.7;
+        }
+
+        .board__square_check {
+            background-color: #ffaaaa !important;
+        }
+
+        .board__square:hover {
+            opacity: 0.9;
+        }
+
+        .game__footer {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .button_theme_primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .button_theme_secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Стили для фигур (юникод) */
+        .piece {
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="page">
+    <div class="game">
+        <div class="game__header">
+            <h1 class="game__title">♞ Шахматы онлайн ♜</h1>
+            <div class="game__status" id="gameStatus">Ход белых</div>
+        </div>
+        
+        <div class="game__board">
+            <div class="board" id="chessBoard"></div>
+        </div>
+        
+        <div class="game__footer">
+            <button class="button button_theme_primary" onclick="window.game.newGame()">Новая игра</button>
+            <button class="button button_theme_secondary" onclick="window.game.resetGame()">Сброс</button>
+        </div>
+    </div>
+
+    <script>
+        // ==================== ПРИНЦИПЫ SOLID И ООП В КОММЕНТАРИЯХ ====================
+        
+        /**
+         * ПРИНЦИПЫ ООП:
+         * 1. АБСТРАКЦИЯ: Класс Piece абстрагирует общие свойства всех фигур
+         * 2. ИНКАПСУЛЯЦИЯ: Свойства фигур (color, type) скрыты и доступны через методы
+         * 3. НАСЛЕДОВАНИЕ: Конкретные фигуры наследуются от Piece
+         * 4. ПОЛИМОРФИЗМ: Метод getValidMoves() по-разному реализован для каждой фигуры
+         * 
+         * ПРИНЦИПЫ SOLID:
+         * S - Каждый класс отвечает за одну задачу (Piece - фигура, Board - доска, Game - логика)
+         * O - Можно добавить новую фигуру, не меняя существующий код (просто новый класс)
+         * L - Любая фигура может быть использована там, где ожидается Piece
+         * I - Интерфейсы разделены (независимые классы для разных аспектов)
+         * D - Game зависит от абстракции Board, а не от конкретной реализации
+         */
+
+        // ==================== МОДЕЛИ (S - Single Responsibility) ====================
+
+        /**
+         * Базовый класс фигуры (Абстракция)
+         * S: Отвечает только за хранение данных фигуры
+         */
+        class Piece {
+            constructor(color, type) {
+                this.color = color; // 'white' или 'black'
+                this.type = type;   // 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king'
+                this.hasMoved = false;
+            }
+
+            // Метод для полиморфизма - будет переопределяться
+            getValidMoves(position, board) {
+                return []; // Базовый класс возвращает пустой массив
+            }
+
+            getSymbol() {
+                const symbols = {
+                    king: { white: '♔', black: '♚' },
+                    queen: { white: '♕', black: '♛' },
+                    rook: { white: '♖', black: '♜' },
+                    bishop: { white: '♗', black: '♝' },
+                    knight: { white: '♘', black: '♞' },
+                    pawn: { white: '♙', black: '♟' }
+                };
+                return symbols[this.type]?.[this.color] || '?';
+            }
+        }
+
+        /**
+         * Конкретные классы фигур (Наследование + Полиморфизм)
+         * O: Классы открыты для расширения, закрыты для изменения
+         * L: Любой наследник Piece может заменить родителя
+         */
+        class King extends Piece {
+            constructor(color) {
+                super(color, 'king');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        if (i === 0 && j === 0) continue;
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                            const piece = board.getPiece(newRow, newCol);
+                            if (!piece || piece.color !== this.color) {
+                                moves.push([newRow, newCol]);
+                            }
+                        }
+                    }
+                }
+                return moves;
+            }
+        }
+
+        class Queen extends Piece {
+            constructor(color) {
+                super(color, 'queen');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                const directions = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]];
+                
+                for (const [dx, dy] of directions) {
+                    let newRow = row + dx;
+                    let newCol = col + dy;
+                    
+                    while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const piece = board.getPiece(newRow, newCol);
+                        if (!piece) {
+                            moves.push([newRow, newCol]);
+                        } else {
+                            if (piece.color !== this.color) {
+                                moves.push([newRow, newCol]);
+                            }
+                            break;
+                        }
+                        newRow += dx;
+                        newCol += dy;
+                    }
+                }
+                return moves;
+            }
+        }
+
+        class Rook extends Piece {
+            constructor(color) {
+                super(color, 'rook');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                
+                for (const [dx, dy] of directions) {
+                    let newRow = row + dx;
+                    let newCol = col + dy;
+                    
+                    while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const piece = board.getPiece(newRow, newCol);
+                        if (!piece) {
+                            moves.push([newRow, newCol]);
+                        } else {
+                            if (piece.color !== this.color) {
+                                moves.push([newRow, newCol]);
+                            }
+                            break;
+                        }
+                        newRow += dx;
+                        newCol += dy;
+                    }
+                }
+                return moves;
+            }
+        }
+
+        class Bishop extends Piece {
+            constructor(color) {
+                super(color, 'bishop');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                const directions = [[-1,-1], [-1,1], [1,-1], [1,1]];
+                
+                for (const [dx, dy] of directions) {
+                    let newRow = row + dx;
+                    let newCol = col + dy;
+                    
+                    while (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const piece = board.getPiece(newRow, newCol);
+                        if (!piece) {
+                            moves.push([newRow, newCol]);
+                        } else {
+                            if (piece.color !== this.color) {
+                                moves.push([newRow, newCol]);
+                            }
+                            break;
+                        }
+                        newRow += dx;
+                        newCol += dy;
+                    }
+                }
+                return moves;
+            }
+        }
+
+        class Knight extends Piece {
+            constructor(color) {
+                super(color, 'knight');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                const jumps = [[-2,-1], [-2,1], [-1,-2], [-1,2], [1,-2], [1,2], [2,-1], [2,1]];
+                
+                for (const [dx, dy] of jumps) {
+                    const newRow = row + dx;
+                    const newCol = col + dy;
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        const piece = board.getPiece(newRow, newCol);
+                        if (!piece || piece.color !== this.color) {
+                            moves.push([newRow, newCol]);
+                        }
+                    }
+                }
+                return moves;
+            }
+        }
+
+        class Pawn extends Piece {
+            constructor(color) {
+                super(color, 'pawn');
+            }
+
+            getValidMoves(position, board) {
+                const moves = [];
+                const [row, col] = position;
+                const direction = this.color === 'white' ? -1 : 1;
+                const startRow = this.color === 'white' ? 6 : 1;
+
+                // Движение вперед
+                if (board.isEmpty(row + direction, col)) {
+                    moves.push([row + direction, col]);
+                    
+                    // Двойной ход с начальной позиции
+                    if (row === startRow && board.isEmpty(row + 2*direction, col)) {
+                        moves.push([row + 2*direction, col]);
+                    }
+                }
+
+                // Взятие
+                for (const dc of [-1, 1]) {
+                    const newCol = col + dc;
+                    if (newCol >= 0 && newCol < 8) {
+                        const piece = board.getPiece(row + direction, newCol);
+                        if (piece && piece.color !== this.color) {
+                            moves.push([row + direction, newCol]);
+                        }
+                    }
+                }
+
+                return moves;
+            }
+        }
+
+        /**
+         * Класс доски (S: Отвечает только за хранение и управление фигурами)
+         * D: Зависит от абстракции Piece
+         */
+        class Board {
+            constructor() {
+                this.grid = this.createEmptyBoard();
+            }
+
+            createEmptyBoard() {
+                return Array(8).fill().map(() => Array(8).fill(null));
+            }
+
+            setupInitialPosition() {
+                this.grid = this.createEmptyBoard();
+                
+                // Расстановка черных фигур
+                this.grid[0][0] = new Rook('black');
+                this.grid[0][1] = new Knight('black');
+                this.grid[0][2] = new Bishop('black');
+                this.grid[0][3] = new Queen('black');
+                this.grid[0][4] = new King('black');
+                this.grid[0][5] = new Bishop('black');
+                this.grid[0][6] = new Knight('black');
+                this.grid[0][7] = new Rook('black');
+                
+                for (let i = 0; i < 8; i++) {
+                    this.grid[1][i] = new Pawn('black');
+                }
+
+                // Расстановка белых фигур
+                this.grid[7][0] = new Rook('white');
+                this.grid[7][1] = new Knight('white');
+                this.grid[7][2] = new Bishop('white');
+                this.grid[7][3] = new Queen('white');
+                this.grid[7][4] = new King('white');
+                this.grid[7][5] = new Bishop('white');
+                this.grid[7][6] = new Knight('white');
+                this.grid[7][7] = new Rook('white');
+                
+                for (let i = 0; i < 8; i++) {
+                    this.grid[6][i] = new Pawn('white');
+                }
+            }
+
+            getPiece(row, col) {
+                return this.grid[row]?.[col] || null;
+            }
+
+            setPiece(row, col, piece) {
+                if (row >= 0 && row < 8 && col >= 0 && col < 8) {
+                    this.grid[row][col] = piece;
+                }
+            }
+
+            isEmpty(row, col) {
+                return !this.getPiece(row, col);
+            }
+
+            movePiece(fromRow, fromCol, toRow, toCol) {
+                const piece = this.getPiece(fromRow, fromCol);
+                if (piece) {
+                    piece.hasMoved = true;
+                    this.setPiece(toRow, toCol, piece);
+                    this.setPiece(fromRow, fromCol, null);
+                    return true;
+                }
+                return false;
+            }
+
+            findKing(color) {
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const piece = this.grid[i][j];
+                        if (piece && piece.type === 'king' && piece.color === color) {
+                            return [i, j];
+                        }
+                    }
+                }
+                return null;
+            }
+
+            isSquareAttacked(row, col, attackingColor) {
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const piece = this.grid[i][j];
+                        if (piece && piece.color === attackingColor) {
+                            const moves = piece.getValidMoves([i, j], this);
+                            if (moves.some(([r, c]) => r === row && c === col)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+
+            clone() {
+                const newBoard = new Board();
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const piece = this.grid[i][j];
+                        if (piece) {
+                            const PieceClass = piece.constructor;
+                            newBoard.grid[i][j] = new PieceClass(piece.color);
+                            newBoard.grid[i][j].hasMoved = piece.hasMoved;
+                        }
+                    }
+                }
+                return newBoard;
+            }
+        }
+
+        /**
+         * Класс игры (S: Отвечает за логику игры)
+         * D: Зависит от абстракций Board и Renderer
+         */
+        class Game {
+            constructor(renderer) {
+                this.board = new Board();
+                this.renderer = renderer;
+                this.currentPlayer = 'white';
+                this.selectedSquare = null;
+                this.availableMoves = [];
+                this.gameOver = false;
+                this.check = false;
+                
+                this.board.setupInitialPosition();
+            }
+
+            newGame() {
+                this.board = new Board();
+                this.board.setupInitialPosition();
+                this.currentPlayer = 'white';
+                this.selectedSquare = null;
+                this.availableMoves = [];
+                this.gameOver = false;
+                this.check = false;
+                this.renderer.render(this);
+            }
+
+            resetGame() {
+                this.newGame();
+            }
+
+            selectSquare(row, col) {
+                if (this.gameOver) return;
+
+                const piece = this.board.getPiece(row, col);
+
+                // Если уже выбрана какая-то клетка
+                if (this.selectedSquare) {
+                    const [selectedRow, selectedCol] = this.selectedSquare;
+                    
+                    // Проверяем, является ли выбранная клетка доступным ходом
+                    const isAvailableMove = this.availableMoves.some(
+                        ([r, c]) => r === row && c === col
+                    );
+
+                    if (isAvailableMove) {
+                        // Совершаем ход
+                        this.makeMove(selectedRow, selectedCol, row, col);
+                        this.selectedSquare = null;
+                        this.availableMoves = [];
+                    } else if (piece && piece.color === this.currentPlayer) {
+                        // Выбираем другую свою фигуру
+                        this.selectedSquare = [row, col];
+                        this.availableMoves = this.getValidMovesWithCheck(row, col);
+                    } else {
+                        // Снимаем выделение
+                        this.selectedSquare = null;
+                        this.availableMoves = [];
+                    }
+                } 
+                // Если ничего не выбрано и выбрана своя фигура
+                else if (piece && piece.color === this.currentPlayer) {
+                    this.selectedSquare = [row, col];
+                    this.availableMoves = this.getValidMovesWithCheck(row, col);
+                }
+
+                this.renderer.render(this);
+            }
+
+            getValidMovesWithCheck(row, col) {
+                const piece = this.board.getPiece(row, col);
+                if (!piece) return [];
+
+                const allMoves = piece.getValidMoves([row, col], this.board);
+                
+                // Фильтруем ходы, которые оставляют короля под шахом
+                return allMoves.filter(([toRow, toCol]) => {
+                    const newBoard = this.board.clone();
+                    newBoard.movePiece(row, col, toRow, toCol);
+                    
+                    const kingPos = newBoard.findKing(piece.color);
+                    return !newBoard.isSquareAttacked(kingPos[0], kingPos[1], 
+                                                      piece.color === 'white' ? 'black' : 'white');
+                });
+            }
+
+            makeMove(fromRow, fromCol, toRow, toCol) {
+                const piece = this.board.getPiece(fromRow, fromCol);
+                
+                // Совершаем ход
+                this.board.movePiece(fromRow, fromCol, toRow, toCol);
+                
+                // Проверяем шах
+                const opponentColor = this.currentPlayer === 'white' ? 'black' : 'white';
+                const kingPos = this.board.findKing(opponentColor);
+                this.check = this.board.isSquareAttacked(kingPos[0], kingPos[1], this.currentPlayer);
+                
+                // Проверяем мат
+                if (this.check && this.isCheckmate(opponentColor)) {
+                    this.gameOver = true;
+                    this.renderer.setStatus(`Мат! Победили ${this.currentPlayer === 'white' ? 'белые' : 'черные'}`);
+                } else {
+                    // Меняем игрока
+                    this.currentPlayer = opponentColor;
+                    this.renderer.setStatus(`Ход ${this.currentPlayer === 'white' ? 'белых' : 'черных'}${this.check ? ' (ШАХ!)' : ''}`);
+                }
+                
+                this.renderer.render(this);
+            }
+
+            isCheckmate(color) {
+                for (let i = 0; i < 8; i++) {
+                    for (let j = 0; j < 8; j++) {
+                        const piece = this.board.getPiece(i, j);
+                        if (piece && piece.color === color) {
+                            const moves = this.getValidMovesWithCheck(i, j);
+                            if (moves.length > 0) return false;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+
+        /**
+         * Класс рендерера (S: Отвечает только за отрисовку)
+         * I: Реализует только методы для работы с отображением
+         */
+        class Renderer {
+            constructor(boardElement, statusElement) {
+                this.boardElement = boardElement;
+                this.statusElement = statusElement;
+            }
+
+            render(game) {
+                this.boardElement.innerHTML = '';
+                
+                for (let i = 0; i < 8; i++) {
+                    const rowElement = document.createElement('div');
+                    rowElement.className = 'board__row';
+                    
+                    for (let j = 0; j < 8; j++) {
+                        const square = document.createElement('div');
+                        const isLight = (i + j) % 2 === 0;
+                        const piece = game.board.getPiece(i, j);
+                        
+                        // БЭМ: миксины классов
+                        let squareClass = 'board__square';
+                        squareClass += isLight ? ' board__square_theme_light' : ' board__square_theme_dark';
+                        
+                        // Проверка выделения
+                        if (game.selectedSquare && game.selectedSquare[0] === i && game.selectedSquare[1] === j) {
+                            squareClass += ' board__square_selected';
+                        }
+                        
+                        // Проверка доступных ходов
+                        if (game.availableMoves.some(([r, c]) => r === i && c === j)) {
+                            squareClass += ' board__square_available';
+                        }
+                        
+                        // Проверка шаха
+                        if (game.check && piece && piece.type === 'king' && 
+                            piece.color === game.currentPlayer) {
+                            squareClass += ' board__square_check';
+                        }
+                        
+                        square.className = squareClass;
+                        square.dataset.row = i;
+                        square.dataset.col = j;
+                        
+                        if (piece) {
+                            const pieceSpan = document.createElement('span');
+                            pieceSpan.className = 'piece';
+                            pieceSpan.textContent = piece.getSymbol();
+                            square.appendChild(pieceSpan);
+                        }
+                        
+                        square.addEventListener('click', () => {
+                            window.game.selectSquare(i, j);
+                        });
+                        
+                        rowElement.appendChild(square);
+                    }
+                    
+                    this.boardElement.appendChild(rowElement);
+                }
+            }
+
+            setStatus(text) {
+                this.statusElement.textContent = text;
+            }
+        }
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ====================
+        
+        // D: Инверсия зависимостей - Game зависит от абстракции Renderer
+        const renderer = new Renderer(
+            document.getElementById('chessBoard'),
+            document.getElementById('gameStatus')
+        );
+        
+        // Создаем игру и сохраняем в глобальную область для доступа из кнопок
+        window.game = new Game(renderer);
+        
+        // Начальная отрисовка
+        window.game.renderer.render(window.game);
+        window.game.renderer.setStatus('Ход белых');
+    </script>
+</body>
+</html>
